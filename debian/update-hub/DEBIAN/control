@@ -1,0 +1,9 @@
+Package: update-hub
+Version: 1.0.0-1
+Architecture: amd64
+Maintainer: Lars Wirzenius <liw@liw.fi>
+Installed-Size: 8
+Section: misc
+Priority: optional
+Description: greet user
+ hithere greets the user, or the world.
