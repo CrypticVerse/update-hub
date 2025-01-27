@@ -1,0 +1,2 @@
+debian/update-hub.desktop usr/share/applications
+update-hub usr/bin/

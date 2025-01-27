@@ -1,7 +1,8 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
+import os
 import sys
 import subprocess
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QPushButton, QMessageBox, QTableWidget, QTableWidgetItem, QAbstractItemView, QLineEdit
+from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt
 import apt
 
@@ -18,6 +19,10 @@ class PackageManagerApp(QMainWindow):
         self.create_system_upgrade_tab()
         self.create_update_tab()
         self.create_package_management_tab()
+
+    def package_installed(self, package_name):
+        """Check if a package is installed"""
+        return package_name in self.cache and self.cache[package_name].is_installed
 
     def create_system_upgrade_tab(self):
         system_upgrade_tab = QWidget()
@@ -49,21 +54,21 @@ class PackageManagerApp(QMainWindow):
     def check_for_upgrade(self):
         """Check if an upgrade is available for the system"""
         try:
-            release_info = subprocess.check_output(["lsb_release", "-a"], universal_newlines=True)
+            release_info = subprocess.check_output(["lsb_release", "-r"], universal_newlines=True)
             self.distribution_label.setText(f"Current Distribution Info:\n{release_info}")
         except subprocess.CalledProcessError:
             self.distribution_label.setText("Failed to retrieve distribution info.")
 
         try:
-            upgrade_check = subprocess.check_output(["do-release-upgrade", "-c"], universal_newlines=True)
-            if "The following packages will be upgraded" in upgrade_check:
+            upgrade_check = subprocess.run(["do-release-upgrade", "-c"], capture_output=True, text=True)
+            if upgrade_check.stdout and "run 'do-release-upgrade'" in upgrade_check.stdout.strip().lower():
                 self.upgrade_status_label.setText("Updates are available! Click 'Upgrade Now' to upgrade.")
                 self.upgrade_all_button.setEnabled(True)
             else:
                 self.upgrade_status_label.setText("Your system is up-to-date.")
                 self.upgrade_all_button.setEnabled(False)
-        except subprocess.CalledProcessError:
-            self.upgrade_status_label.setText("Error checking upgrade status.")
+        except subprocess.CalledProcessError as e:
+            self.upgrade_status_label.setText(f"Error checking upgrade status {e}.")
             self.upgrade_all_button.setEnabled(False)
 
     def upgrade_system(self):
@@ -98,6 +103,11 @@ class PackageManagerApp(QMainWindow):
         self.update_table = QTableWidget()
         self.update_table.setColumnCount(4)
         self.update_table.setHorizontalHeaderLabels(["Package", "Current Version", "New Version", "Size"])
+        self.update_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.update_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.update_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.update_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        
         self.update_table.setSelectionMode(QAbstractItemView.MultiSelection)
         layout.addLayout(action_layout)
         layout.addWidget(self.update_table)
@@ -160,54 +170,110 @@ class PackageManagerApp(QMainWindow):
         layout = QVBoxLayout()
 
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Search for a package...")
+        self.search_box.setPlaceholderText("Search for a package to install...")
         self.search_box.returnPressed.connect(self.search_package)
         layout.addWidget(self.search_box)
 
         self.search_results_table = QTableWidget()
         self.search_results_table.setColumnCount(2)
         self.search_results_table.setHorizontalHeaderLabels(["Package", "Install"])
+        self.search_results_table.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.search_results_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         layout.addWidget(self.search_results_table)
+        self.search_results_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.search_results_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+
+        self.remove_search_box = QLineEdit()
+        self.remove_search_box.setPlaceholderText("Search for a package to remove...")
+        self.remove_search_box.returnPressed.connect(self.search_installed_package)
+        layout.addWidget(self.remove_search_box)
 
         self.installed_table = QTableWidget()
         self.installed_table.setColumnCount(2)
         self.installed_table.setHorizontalHeaderLabels(["Installed Package", "Remove"])
+        self.installed_table.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.installed_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         layout.addWidget(self.installed_table)
+        self.installed_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.installed_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
 
-        self.search_package()
+        self.list_installed_packages()
 
         package_management_tab.setLayout(layout)
         self.tabs.addTab(package_management_tab, "Package Management")
 
-    def search_package(self):
-        """Search for packages using apt search and display the results"""
-        search_term = self.search_box.text()
-        if not search_term:
-            return
+    def search_installed_package(self):
+        """Search for an installed package and display results"""
+        search_term = self.remove_search_box.text()
+        installed_packages = subprocess.check_output("apt list --installed", shell=True, universal_newlines=True).splitlines()
+        installed_packages = installed_packages[1:]  # Skip the header line
 
+        if search_term:
+            filtered_packages = [pkg for pkg in installed_packages if search_term in pkg]
+        else:
+            filtered_packages = installed_packages
+
+        self.installed_table.setRowCount(len(filtered_packages))
+
+        for row, package in enumerate(filtered_packages):
+            package_name = package.split('/')[0]
+            self.installed_table.setItem(row, 0, QTableWidgetItem(package_name))
+
+            remove_button = QPushButton("Remove")
+            remove_button.clicked.connect(lambda checked, pkg=package_name: self.remove_package_action(pkg))
+            self.installed_table.setCellWidget(row, 1, remove_button)
+
+    def list_installed_packages(self):
+        """List all installed packages and display them in the installed table"""
         try:
-            result = subprocess.check_output(["apt-cache", "search", search_term], universal_newlines=True)
-            packages = result.splitlines()
+            installed_packages = subprocess.check_output(["apt list --installed"], shell=True, universal_newlines=True).splitlines()
+            installed_packages = installed_packages[1:]  # Skip the header line
 
-            self.search_results_table.setRowCount(len(packages))
-            for row, package in enumerate(packages):
-                package_name = package.split(" ")[0]
-                self.search_results_table.setItem(row, 0, QTableWidgetItem(package_name))
+            if not installed_packages:
+                QMessageBox.warning(self, "No Packages Found", "No installed packages found.")
+                return
 
+            self.installed_table.setRowCount(len(installed_packages))
+
+            for row, package in enumerate(installed_packages):
+                package_name = package.split('/')[0]
+                self.installed_table.setItem(row, 0, QTableWidgetItem(package_name))
+
+                remove_button = QPushButton("Remove")
+                remove_button.clicked.connect(lambda checked, pkg=package_name: self.remove_package_action(pkg))
+                self.installed_table.setCellWidget(row, 1, remove_button)
+        except subprocess.CalledProcessError as e:
+            QMessageBox.warning(self, "Error", f"An error occurred while listing installed packages: {e}")
+
+
+    def search_package(self):
+        """Search for a package and display results"""
+        search_term = self.search_box.text()
+        results = subprocess.check_output(["apt-cache", "search", search_term], universal_newlines=True).splitlines()
+
+        self.search_results_table.setRowCount(len(results))
+
+        for row, result in enumerate(results):
+            package_name = result.split(' - ')[0]
+            self.search_results_table.setItem(row, 0, QTableWidgetItem(package_name))
+
+            if self.package_installed(package_name):
+                install_button = QPushButton("Currently Installed")
+                install_button.setEnabled(False)
+            else:
                 install_button = QPushButton("Install")
                 install_button.clicked.connect(lambda checked, pkg=package_name: self.install_package(pkg))
-                self.search_results_table.setCellWidget(row, 1, install_button)
 
-        except subprocess.CalledProcessError as e:
-            QMessageBox.warning(self, "Search Error", f"An error occurred while searching: {e}")
+            self.search_results_table.setCellWidget(row, 1, install_button)
 
     def install_package(self, package_name):
-        """Install the selected package"""
+        """Install a package"""
         try:
-            subprocess.run(["sudo", "apt-get", "install", package_name], check=True)
-            QMessageBox.information(self, "Package Installed", f"The package {package_name} has been successfully installed.")
+            subprocess.run(["sudo", "apt-get", "install", "-y", package_name], check=True)
+            QMessageBox.information(self, "Install Package", f"The package {package_name} has been successfully installed!")
+            self.search_package()  # Refresh the search results
         except subprocess.CalledProcessError as e:
-            QMessageBox.warning(self, "Installation Error", f"An error occurred while installing {package_name}: {e}")
+            QMessageBox.warning(self, "Installation Error", f"An error occurred while installing the package: {e}")
 
     def remove_package(self):
         """List all installed packages and allow removal"""
@@ -225,7 +291,7 @@ class PackageManagerApp(QMainWindow):
     def remove_package_action(self, package_name):
         """Remove the selected package"""
         try:
-            subprocess.run(["sudo", "apt-get", "remove", package_name], check=True)
+            subprocess.run(["sudo", "apt-get", "remove", "-y", package_name], check=True)
             QMessageBox.information(self, "Package Removed", f"The package {package_name} has been successfully removed.")
             self.remove_package()
         except subprocess.CalledProcessError as e:

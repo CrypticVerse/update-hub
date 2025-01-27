@@ -7,5 +7,7 @@ Build-Depends: debhelper-compat (= 13), python3 (>= 3.10), python3-pyqt5 (>= 5)
 
 Package: update-hub
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, python3
 Description: Update any package or system with ease!
+ Designed for people new to the Debian ecosystem, Update Hub is a simple and easy-to-use GUI for updating packages and the system.
+ It is designed to be user-friendly and easy to use, with a simple interface that allows you to update your system with just a few clicks. 
