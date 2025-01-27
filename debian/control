@@ -1,5 +1,5 @@
 Source: update-hub
-Maintainer: Lars Wirzenius <liw@liw.fi>
+Maintainer: Crypticverse <crypticversemc@gmail.com>
 Section: misc
 Priority: optional
 Standards-Version: 4.7.0
@@ -8,5 +8,4 @@ Build-Depends: debhelper-compat (= 13), python3 (>= 3.10), python3-pyqt5 (>= 5)
 Package: update-hub
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: greet user
- hithere greets the user, or the world.
+Description: Update any package or system with ease!

@@ -2,3 +2,4 @@ debian/.debhelper/*
 debian/update-hub/*
 debian/debhelper-build-timestamp
 debian/update-hub.substvars
+debian/files
