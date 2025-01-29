@@ -28,3 +28,4 @@ pip install pyqt5 # Windows/MacOS
 
 ## License
 GPL-3
+/
