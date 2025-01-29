@@ -1,8 +1,7 @@
-[[Desktop Entry]
+[Desktop Entry]
 Type=Application
 Name=Update Hub
 Comment=Launch Update Hub
 Exec=pkexec /usr/bin/update-hub
 Terminal=false
 Categories=utility;
-]

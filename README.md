@@ -4,7 +4,6 @@ Update Hub is a new Linux Debian GUI (or any system that uses APT) written in Py
 
 ## Installation
 Using the terminal (The only time you will!), run:
-> [!IMPORTANT]
 > Coming soon to APT (Hopefully)
 ```sh
 sudo apt install update-hub
@@ -28,4 +27,3 @@ pip install pyqt5 # Windows/MacOS
 
 ## License
 GPL-3
-/
