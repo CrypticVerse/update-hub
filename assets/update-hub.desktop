@@ -1,7 +1,9 @@
 [Desktop Entry]
+Keywords=updates;system;
 Type=Application
 Name=Update Hub
 Comment=Launch Update Hub
-Exec=pkexec /usr/bin/update-hub
+Exec=/usr/sbin/update-hub-pkexec
+Icon=/usr/share/icons/hicolor/256x256/apps/update-hub.png
 Terminal=false
-Categories=utility;
+Categories=Utility;System;Settings;PackageManager;
