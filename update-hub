@@ -28,10 +28,10 @@ class PackageManagerApp(QMainWindow):
         system_upgrade_tab = QWidget()
         layout = QVBoxLayout()
 
-        self.distribution_label = QLabel("Checking current distribution version...")
+        self.distribution_label = QLabel("Coming soon!")
         self.distribution_label.setWordWrap(True)
 
-        self.upgrade_status_label = QLabel("Your system is up-to-date.")
+        self.upgrade_status_label = QLabel("Coming soon!")
         self.upgrade_status_label.setWordWrap(True)
 
         self.upgrade_all_button = QPushButton("Upgrade Now")
@@ -52,33 +52,14 @@ class PackageManagerApp(QMainWindow):
         self.check_for_upgrade()
 
     def check_for_upgrade(self):
-        """Check if an upgrade is available for the system"""
-        try:
-            release_info = subprocess.check_output(["lsb_release", "-r"], universal_newlines=True)
-            self.distribution_label.setText(f"Current Distribution Info:\n{release_info}")
-        except subprocess.CalledProcessError:
-            self.distribution_label.setText("Failed to retrieve distribution info.")
-
-        try:
-            upgrade_check = subprocess.run(["do-release-upgrade", "-c"], capture_output=True, text=True)
-            if upgrade_check.stdout and "run 'do-release-upgrade'" in upgrade_check.stdout.strip().lower():
-                self.upgrade_status_label.setText("Updates are available! Click 'Upgrade Now' to upgrade.")
-                self.upgrade_all_button.setEnabled(True)
-            else:
-                self.upgrade_status_label.setText("Your system is up-to-date.")
-                self.upgrade_all_button.setEnabled(False)
-        except subprocess.CalledProcessError as e:
-            self.upgrade_status_label.setText(f"Error checking upgrade status {e}.")
-            self.upgrade_all_button.setEnabled(False)
+        print("Coming soon")
 
     def upgrade_system(self):
         """Upgrade the system"""
         try:
             response = QMessageBox.question(self, "Confirm Upgrade", "Are you sure you want to upgrade your system?", QMessageBox.Yes | QMessageBox.No)
             if response == QMessageBox.Yes:
-                subprocess.run(["sudo", "do-release-upgrade", "-f", "DistUpgradeViewNonInteractive"], check=True)
-                QMessageBox.information(self, "System Upgrade", "Your system has been successfully upgraded!")
-                self.check_for_upgrade()
+                QMessageBox.information(self, "System Upgrade", "Coming Soon!")
         except subprocess.CalledProcessError as e:
             QMessageBox.warning(self, "Upgrade Error", f"An error occurred during the upgrade: {e}")
 
