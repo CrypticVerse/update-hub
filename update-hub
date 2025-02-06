@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-import os
-import sys
-import subprocess
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt
-import apt
+from PyQt5.QtGui import QColor
+import apt, threading, sys, subprocess
+
+app = QApplication(sys.argv)
 
 class PackageManagerApp(QMainWindow):
     def __init__(self):
@@ -12,59 +12,21 @@ class PackageManagerApp(QMainWindow):
         self.setWindowTitle("Update Hub")
         self.setGeometry(100, 100, 800, 600)
 
-        self.cache = apt.Cache()
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
 
-        self.create_system_upgrade_tab()
         self.create_update_tab()
-        self.create_package_management_tab()
+        self.create_install_tab()
+        self.create_remove_tab()
 
-    def package_installed(self, package_name):
-        """Check if a package is installed"""
-        return package_name in self.cache and self.cache[package_name].is_installed
-
-    def create_system_upgrade_tab(self):
-        system_upgrade_tab = QWidget()
-        layout = QVBoxLayout()
-
-        self.distribution_label = QLabel("Coming soon!")
-        self.distribution_label.setWordWrap(True)
-
-        self.upgrade_status_label = QLabel("Coming soon!")
-        self.upgrade_status_label.setWordWrap(True)
-
-        self.upgrade_all_button = QPushButton("Upgrade Now")
-        self.upgrade_all_button.setEnabled(False)
-        self.upgrade_all_button.clicked.connect(self.upgrade_system)
-
-        self.refresh_button = QPushButton("Check for Upgrade")
-        self.refresh_button.clicked.connect(self.check_for_upgrade)
-
-        layout.addWidget(self.distribution_label)
-        layout.addWidget(self.upgrade_status_label)
-        layout.addWidget(self.upgrade_all_button)
-        layout.addWidget(self.refresh_button)
-
-        system_upgrade_tab.setLayout(layout)
-        self.tabs.addTab(system_upgrade_tab, "System Upgrade")
-
-        self.check_for_upgrade()
-
-    def check_for_upgrade(self):
-        print("Coming soon")
-
-    def upgrade_system(self):
-        """Upgrade the system"""
+    def run_apt(self, command):
         try:
-            response = QMessageBox.question(self, "Confirm Upgrade", "Are you sure you want to upgrade your system?", QMessageBox.Yes | QMessageBox.No)
-            if response == QMessageBox.Yes:
-                QMessageBox.information(self, "System Upgrade", "Coming Soon!")
+            subprocess.run(command, check=True)
+            return True, None
         except subprocess.CalledProcessError as e:
-            QMessageBox.warning(self, "Upgrade Error", f"An error occurred during the upgrade: {e}")
+            return False, str(e)
 
     def create_update_tab(self):
-        """Create the 'Updates' tab"""
         update_tab = QWidget()
         layout = QVBoxLayout()
 
@@ -74,12 +36,12 @@ class PackageManagerApp(QMainWindow):
         self.refresh_button.clicked.connect(self.fetch_updates)
         self.install_button = QPushButton("Install")
         self.install_button.clicked.connect(self.install_updates)
-        self.delete_button = QPushButton("Delete")
-        self.delete_button.clicked.connect(self.delete_update)
+        self.install_all_button = QPushButton("Install All Updates")
+        self.install_all_button.clicked.connect(self.install_all_updates)
 
         action_layout.addWidget(self.refresh_button)
         action_layout.addWidget(self.install_button)
-        action_layout.addWidget(self.delete_button)
+        action_layout.addWidget(self.install_all_button)
 
         self.update_table = QTableWidget()
         self.update_table.setColumnCount(4)
@@ -97,6 +59,69 @@ class PackageManagerApp(QMainWindow):
 
         update_tab.setLayout(layout)
         self.tabs.addTab(update_tab, "Updates")
+
+    def create_install_tab(self):
+        install_tab = QWidget()
+        layout = QVBoxLayout()
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Search for a package to install...")
+        self.search_box.returnPressed.connect(self.search_package)
+        layout.addWidget(self.search_box)
+
+        self.install_selected_button = QPushButton("Install Selected")
+        self.install_selected_button.clicked.connect(self.install_all_selected)
+        layout.addWidget(self.install_selected_button)
+
+        self.search_results_table = QTableWidget()
+        self.search_results_table.setColumnCount(2)
+        self.search_results_table.setHorizontalHeaderLabels(["Package", "Installed"])
+        self.search_results_table.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.search_results_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        layout.addWidget(self.search_results_table)
+        self.search_results_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+
+        self.search_package()
+        install_tab.setLayout(layout)
+        self.tabs.addTab(install_tab, "Install Packages")
+
+    def create_remove_tab(self):
+        remove_tab = QWidget()
+        layout = QVBoxLayout()
+
+        actions = QHBoxLayout()
+
+        self.remove_search_box = QLineEdit()
+        self.remove_search_box.setPlaceholderText("Search for a package to remove...")
+        self.remove_search_box.returnPressed.connect(self.search_installed_package)
+        layout.addWidget(self.remove_search_box)
+
+        self.remove_selected_button = QPushButton("Remove Selected")
+        self.remove_auto_button = QPushButton("Remove Obsolete Packages")
+        self.remove_selected_button.clicked.connect(self.remove_all_selected)
+        self.remove_auto_button.clicked.connect(self.remove_auto)
+        actions.addWidget(self.remove_selected_button)
+        actions.addWidget(self.remove_auto_button)
+
+        layout.addLayout(actions)
+
+        self.installed_table = QTableWidget()
+        self.installed_table.setColumnCount(1)
+        self.installed_table.setHorizontalHeaderLabels(["Installed Packages"])
+        self.installed_table.setSelectionMode(QAbstractItemView.MultiSelection)
+        self.installed_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        layout.addWidget(self.installed_table)
+        self.installed_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+
+        self.list_installed_packages()
+        remove_tab.setLayout(layout)
+        self.tabs.addTab(remove_tab, "Remove Packages")
+
+    cache = apt.Cache()
+    tabs = QTabWidget()
+
+    def package_installed(self, package_name):
+        """Check if a package is installed"""
+        return package_name in self.cache and self.cache[package_name].is_installed
 
     def fetch_updates(self):
         """Fetch available updates and display them in the update table"""
@@ -119,9 +144,8 @@ class PackageManagerApp(QMainWindow):
             self.update_table.setItem(row, 3, size_item)
 
     def install_updates(self):
-        """Install the selected updates"""
         selected_rows = self.update_table.selectedIndexes()
-        
+    
         if not selected_rows:
             QMessageBox.warning(self, "No Selection", "Please select at least one package to install.")
             return
@@ -132,65 +156,46 @@ class PackageManagerApp(QMainWindow):
             package_name = self.update_table.item(row, 0).text()
             packages_to_install.append(package_name)
 
-        try:
-            for package_name in packages_to_install:
-                subprocess.run(["sudo", "apt-get", "install", "-y", package_name], check=True)
+        response = QMessageBox.question(self, "Confirm Upgrade", 
+                                f"Are you sure you want to upgrade {len(packages_to_install)} packages?", 
+                                QMessageBox.Yes | QMessageBox.No)
+    
+        if response == QMessageBox.Yes:
+            def install_thread():
+                success, error = self.run_apt(["sudo", "apt-get", "upgrade", "-y"] + packages_to_install)
+                if success:
+                    QMessageBox.information(self, "Install Updates", "The selected updates have been successfully installed!")
+                    self.fetch_updates()
+                else:
+                    QMessageBox.warning(self, "Installation Error", f"An error occurred while installing updates: {error}")
 
-            QMessageBox.information(self, "Install Updates", "The selected updates have been successfully installed!")
-            self.fetch_updates()
-        except subprocess.CalledProcessError as e:
-            QMessageBox.warning(self, "Installation Error", f"An error occurred while installing updates: {e}")
+            threading.Thread(target=install_thread).start()
 
-    def delete_update(self):
-        """Placeholder for delete functionality"""
-        QMessageBox.information(self, "Delete Update", "Delete functionality not implemented yet.")
+    def install_all_updates(self):
+        self.fetch_updates()
+        result = subprocess.run("apt upgrade -s", shell=True, capture_output=True, text=True)
 
-    def create_package_management_tab(self):
-        """Creates the Package Management tab"""
-        package_management_tab = QWidget()
-        layout = QVBoxLayout()
+        if result.stdout.__contains__("Upgrading: 0") and result.stdout.strip():
+            response = QMessageBox.question(self, "Confirm Upgrade", 
+                                    "Are you sure you want to upgrade all available packages?", 
+                                    QMessageBox.Yes | QMessageBox.No)
+    
+            if response == QMessageBox.Yes:
+                def install_thread():
+                    success, error = self.run_apt(["sudo", "apt-get", "upgrade", "-y"])
+                    if success:
+                        QMessageBox.information(self, "Install Updates", "All available updates have been successfully installed!")
+                        self.fetch_updates()
+                    else:
+                        QMessageBox.warning(self, "Installation Error", f"An error occurred while installing updates: {error}")
 
-        self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Search for a package to install...")
-        self.search_box.returnPressed.connect(self.search_package)
-        layout.addWidget(self.search_box)
+                threading.Thread(target=install_thread).start()
 
-        self.install_selected_button = QPushButton("Install Selected")
-        self.install_selected_button.clicked.connect(self.install_all_selected)
-        layout.addWidget(self.install_selected_button)
-
-        self.search_results_table = QTableWidget()
-        self.search_results_table.setColumnCount(1)
-        self.search_results_table.setHorizontalHeaderLabels(["Package"])
-        self.search_results_table.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.search_results_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        layout.addWidget(self.search_results_table)
-        self.search_results_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-
-        self.remove_search_box = QLineEdit()
-        self.remove_search_box.setPlaceholderText("Search for a package to remove...")
-        self.remove_search_box.returnPressed.connect(self.search_installed_package)
-        layout.addWidget(self.remove_search_box)
-
-        self.remove_selected_button = QPushButton("Remove Selected")
-        self.remove_selected_button.clicked.connect(self.remove_all_selected)
-        layout.addWidget(self.remove_selected_button)
-
-        self.installed_table = QTableWidget()
-        self.installed_table.setColumnCount(1)
-        self.installed_table.setHorizontalHeaderLabels(["Installed Packages"])
-        self.installed_table.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.installed_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        layout.addWidget(self.installed_table)
-        self.installed_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-
-        self.list_installed_packages()
-
-        package_management_tab.setLayout(layout)
-        self.tabs.addTab(package_management_tab, "Package Management")
+        else:
+            QMessageBox.information(self, "Up to Date", "All packages are up to date.")
+        
 
     def search_installed_package(self):
-        """Search for an installed package and display results"""
         search_term = self.remove_search_box.text()
         installed_packages = subprocess.check_output("apt list --installed", shell=True, universal_newlines=True).splitlines()
         installed_packages = installed_packages[1:]  # Skip the header line
@@ -211,7 +216,6 @@ class PackageManagerApp(QMainWindow):
             self.installed_table.setCellWidget(row, 1, remove_button)
 
     def list_installed_packages(self):
-        """List all installed packages and display them in the installed table"""
         try:
             installed_packages = subprocess.check_output(["apt list --installed"], shell=True, universal_newlines=True).splitlines()
             installed_packages = installed_packages[1:]  # Skip the header line
@@ -234,35 +238,26 @@ class PackageManagerApp(QMainWindow):
 
 
     def search_package(self):
-        """Search for a package and display results"""
         search_term = self.search_box.text()
         results = subprocess.check_output(["apt-cache", "search", search_term], universal_newlines=True).splitlines()
 
         self.search_results_table.setRowCount(len(results))
 
         for row, result in enumerate(results):
+            installed = "No"
             package_name = result.split(' - ')[0]
-            self.search_results_table.setItem(row, 0, QTableWidgetItem(package_name))
+            package_item = QTableWidgetItem(package_name)
+            package_item.setFlags(package_item.flags() & ~Qt.ItemIsEditable)
 
-            checkbox = QCheckBox()
+            if self.package_installed(package_name):
+                installed = "Yes"
+                package_item.setFlags(package_item.flags() & ~Qt.ItemIsSelectable)
+                package_item.setBackground(QColor(237, 237, 237))
 
-            self.search_results_table.setCellWidget(row, 1, checkbox)
+            self.search_results_table.setItem(row, 0, package_item)
+            self.search_results_table.setItem(row, 1, QTableWidgetItem(installed))
 
-    def install_package(self, package_name):
-        """Install a package with confirmation"""
-        reply = QMessageBox.question(self, 'Install Package',
-                                     f"Are you sure you want to install the package '{package_name}'?",
-                                     QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            try:
-                subprocess.run(["sudo", "apt", "install", "-y", package_name], check=True)
-                QMessageBox.information(self, "Install Package", f"The package '{package_name}' has been successfully installed!")
-                self.search_package()  # Refresh the search results
-            except subprocess.CalledProcessError as e:
-                QMessageBox.warning(self, "Installation Error", f"An error occurred while installing the package: {e}")
-                
     def remove_package(self):
-        """List all installed packages and allow removal"""
         installed_packages = subprocess.check_output(["dpkg", "--get-selections"], universal_newlines=True).splitlines()
         self.installed_table.setRowCount(len(installed_packages))
 
@@ -275,7 +270,6 @@ class PackageManagerApp(QMainWindow):
             self.installed_table.setCellWidget(row, 1, remove_button)
 
     def remove_all_selected(self):
-        """Remove all selected packages"""
         selected_rows = self.installed_table.selectedIndexes()
 
         if not selected_rows:
@@ -292,67 +286,104 @@ class PackageManagerApp(QMainWindow):
             QMessageBox.warning(self, "No Packages", "No packages to remove.")
             return
 
-    # Confirmation dialog
         response = QMessageBox.question(self, "Confirm Removal", 
-                                    f"Are you sure you want to remove {len(packages_to_remove)} packages?", 
-                                    QMessageBox.Yes | QMessageBox.No)
+                                f"Are you sure you want to remove {len(packages_to_remove)} packages?", 
+                                QMessageBox.Yes | QMessageBox.No)
         if response == QMessageBox.Yes:
-            try:
-                for package_name in packages_to_remove:
-                    subprocess.run(["sudo", "apt-get", "remove", "-y", package_name], check=True)
-                QMessageBox.information(self, "Packages Removed", "The selected packages have been successfully removed.")
-                self.remove_package()  # Refresh the list of installed packages
-            except subprocess.CalledProcessError as e:
-                QMessageBox.warning(self, "Removal Error", f"An error occurred while removing the packages: {e}")
+            def remove_thread():
+                success, error = self.run_apt(["sudo", "apt-get", "remove", "-y"] + packages_to_remove)
+                if success:
+                    QMessageBox.information(self, "Packages Removed", "The selected packages have been successfully removed.")
+                    self.list_installed_packages()  # Refresh the list of installed packages
+                else:
+                    QMessageBox.warning(self, "Removal Error", f"An error occurred while removing packages: {error}")
+
+        threading.Thread(target=remove_thread).start()
+
+    def remove_auto(self):
+        response = QMessageBox.question(self, "Confirm Removal", 
+                                f"Are you sure you want to autoremove obsolete packages?", 
+                                QMessageBox.Yes | QMessageBox.No)
+        if response == QMessageBox.Yes:
+            def auto_remove_thread():
+                success, error = self.run_apt(["sudo", "apt-get", "autoremove", "-y"])
+                if success:
+                    QMessageBox.information(self, "Auto Remove", "Obsolete packages have been successfully removed.")
+                    self.list_installed_packages()  # Refresh the list of installed packages
+                else:
+                    QMessageBox.warning(self, "Auto Remove Error", f"An error occurred while removing obsolete packages: {error}")
+
+            threading.Thread(target=auto_remove_thread).start()
+
+    def get_package_deps(self, package_name):
+        try:
+            result = subprocess.run(f"apt-cache depends {package_name}", capture_output=True, shell=True, text=True)
+            dependencies = []
+
+            for line in result.stdout.splitlines():
+                if line.strip().startswith("Depends:") or line.strip().startswith("PreDepends:"):
+                    dep_name = line.strip().split(" ")[1]
+                    dependencies.append(dep_name)
+
+            return dependencies
+        except subprocess.CalledProcessError:
+            return []
 
     def install_all_selected(self):
-        """Install all selected packages"""
         selected_rows = self.search_results_table.selectedIndexes()
-    
+
         if not selected_rows:
             QMessageBox.warning(self, "No Selection", "Please select at least one package to install.")
             return
 
         packages_to_install = []
+        all_deps = set()
         for index in selected_rows:
             row = index.row()
             package_name = self.search_results_table.item(row, 0).text()
             if not self.package_installed(package_name):
                 packages_to_install.append(package_name)
+                dependencies = self.get_package_deps(package_name)
+                all_deps.update(dependencies)
 
         if not packages_to_install:
             QMessageBox.warning(self, "No Packages", "No packages to install.")
             return
 
-    # Confirmation dialog
+        total_packages = len(packages_to_install)
+        total_deps = len(all_deps)
         response = QMessageBox.question(self, "Confirm Install", 
-                                    f"Are you sure you want to install {len(packages_to_install)} packages?", 
-                                    QMessageBox.Yes | QMessageBox.No)
+                                f"Are you sure you want to install {total_packages} packages and their {total_deps} dependencies?", 
+                                QMessageBox.Yes | QMessageBox.No)
         if response == QMessageBox.Yes:
-            try:
-                for package_name in packages_to_install:
-                    subprocess.run(["sudo", "apt-get", "install", "-y", package_name], check=True)
-                QMessageBox.information(self, "Install Updates", "The selected updates have been successfully installed!")
-                self.search_package()  # Refresh the search results
-            except subprocess.CalledProcessError as e:
-                QMessageBox.warning(self, "Installation Error", f"An error occurred while installing the packages: {e}")
-            
+            def install_thread():
+                command = ["sudo", "apt-get", "install", "-y"] + packages_to_install
+                success, error = self.run_apt(command)
+                if success:
+                    QMessageBox.information(self, "Packages Installed", "The selected packages have been successfully installed.")
+                    self.search_package()  # Refresh the list of installed packages
+                else:
+                    QMessageBox.warning(self, "Installation Error", f"An error occurred while installing packages: {error}")
+
+            threading.Thread(target=install_thread).start()
+        
 
     def remove_package_action(self, package_name):
-        """Remove the selected package"""
         response = QMessageBox.question(self, "Confirm Removal", 
-                                    f"Are you sure you want to remove {package_name}?", 
-                                    QMessageBox.Yes | QMessageBox.No)
+                                f"Are you sure you want to remove {package_name}?", 
+                                QMessageBox.Yes | QMessageBox.No)
         if response == QMessageBox.Yes:
-            try:
-                subprocess.run(["sudo", "apt-get", "remove", "-y", package_name], check=True)
-                QMessageBox.information(self, "Package Removed", f"The package {package_name} has been successfully removed.")
-                self.remove_package()  # Refresh the list of installed packages
-            except subprocess.CalledProcessError as e:
-                QMessageBox.warning(self, "Removal Error", f"An error occurred while removing {package_name}: {e}")
+            def remove_thread():
+                success, error = self.run_apt(["sudo", "apt-get", "remove", "-y", package_name])
+                if success:
+                    QMessageBox.information(self, "Package Removed", f"The package {package_name} has been successfully removed.")
+                    self.remove_package()  # Refresh the list of installed packages
+                else:
+                    QMessageBox.warning(self, "Removal Error", f"An error occurred while removing {package_name}: {error}")
+
+            threading.Thread(target=remove_thread).start()
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
     window = PackageManagerApp()
     window.show()
     sys.exit(app.exec_())
